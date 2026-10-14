@@ -1,29 +1,24 @@
-// modules/quantify_core.nf
-nextflow.enable.dsl=2
+include { opt } from './helpers.nf'
 
-include { opt } from '../modules/helpers.nf'
-
+// Runs the additional_elements steps (enhancement, segmentation, masks) on
+// one ROI. A retry overwrites what a failed attempt may have written.
 process RUN_SEGMENTATION {
-    
-    tag { "segment: ${file(core_path).baseName}" }
+
+    tag { roi }
 
     input:
     path exp_config
-    tuple val(core_path), path(assembly_done_file)
+    tuple val(roi), val(roi_path)
 
     output:
-    tuple val(core_path), path("${file(core_path).baseName}.SEGMENT_DONE")
+    tuple val(roi), val(roi_path), emit: roi
 
     script:
+    def overwrite = params.overwrite || task.attempt > 1
     """
-    set -euo pipefail
-
-    ${params.envpath} "${params.scripts_dir}/segment_single_core.py" \
-        --exp_config "${exp_config}" \
-        --sdata_path "${core_path}" \
-        ${opt('remote_analysis',     params.remote_analysis)} \
-        ${opt('overwrite',           params.segment_overwrite)}
-
-    touch "${file(core_path).baseName}.SEGMENT_DONE"
+    ${params.plexpipe} segment-roi \\
+        --exp_config '${exp_config}' \\
+        --roi_path '${roi_path}' \\
+        ${opt('overwrite', overwrite)}
     """
 }

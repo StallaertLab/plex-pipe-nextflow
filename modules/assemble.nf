@@ -1,31 +1,26 @@
-// modules/quantify_core.nf
-nextflow.enable.dsl=2
+include { opt } from './helpers.nf'
 
-include { opt } from '../modules/helpers.nf'
-
+// Assembles one ROI from its channel TIFFs. `all_cut` is only there to make
+// this wait until every channel has been cut.
 process RUN_ASSEMBLY {
-    
-    tag { "assemble: ${file(core_path).baseName}" }
+
+    tag { roi }
 
     input:
     path exp_config
-    tuple val(core_id), val(core_path)
-    val all_channels
+    path images_csv
+    tuple val(roi), val(roi_path)
+    val all_cut
 
     output:
-    tuple val(core_path), path("${file(core_path).baseName}.CORE_DONE")
+    tuple val(roi), val(roi_path), emit: roi
 
     script:
     """
-    set -euo pipefail
-
-    ${params.envpath} "${params.scripts_dir}/assemble_core.py" \
-        --exp_config "${exp_config}" \
-        --core_path "${core_path}" \
-        --core_id "${core_id}" \
-        --channels "${all_channels}" \
-        ${opt('remote_analysis',     params.remote_analysis)}
-
-    touch "${file(core_path).baseName}.CORE_DONE"
+    ${params.plexpipe} assemble-roi \\
+        --exp_config '${exp_config}' \\
+        --roi '${roi}' \\
+        --images '${images_csv}' \\
+        ${opt('roi_cleanup', params.roi_cleanup)}
     """
 }

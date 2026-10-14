@@ -1,0 +1,5 @@
+# Nextflow run files
+.nextflow/
+.nextflow.log*
+work/
+pipeline_logs/
