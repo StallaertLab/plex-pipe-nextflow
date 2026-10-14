@@ -1,30 +1,24 @@
-nextflow.enable.dsl=2
+include { opt; globusArgs } from './helpers.nf'
 
-include { opt } from '../modules/helpers.nf'
-
+// Finds the channels, starts Globus transfers (if any) and writes the
+// lists the other processes fan out over.
 process RUN_SETUP {
 
-    tag "Manage analysis."
+    tag "setup"
 
     input:
     path exp_config
 
     output:
-    path "images_manifest.txt", emit: images_manifest
-    path "cores_manifest.txt", emit: cores_manifest
+    path "images.csv", emit: images
+    path "rois.csv",   emit: rois
 
     script:
     """
-    set -euo pipefail
-
-    ${params.envpath} "${params.scripts_dir}/exp_management.py" \
-        --exp_config "${exp_config}" \
-        ${opt('remote_analysis', params.remote_analysis)} \
-        ${opt('globus_config', params.globus_config)} \
-        ${opt('from_collection', params.from_collection)} \
-        ${opt('to_collection', params.to_collection)} \
-        ${opt('globus_home_setting', params.globus_home_setting)} \
-        ${opt('file_checksum', params.file_checksum)} 
-
+    ${params.plexpipe} setup \\
+        --exp_config '${exp_config}' \\
+        --out_dir . \\
+        ${globusArgs()} \\
+        ${opt('file_checksum', params.file_checksum)}
     """
 }

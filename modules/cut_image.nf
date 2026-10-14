@@ -1,31 +1,28 @@
-// modules/quantify_core.nf
-nextflow.enable.dsl=2
+include { opt; globusArgs } from './helpers.nf'
 
-include { opt } from '../modules/helpers.nf'
-
+// Cuts every ROI from one channel image. With Globus, first waits for that
+// channel's transfer task to succeed.
+// Not retried: with --cleanup the transferred image is gone after cutting.
+// (`channel_name`, not `channel`: `channel` is a Nextflow keyword.)
 process RUN_CUTTING {
-    
-    tag { "cut: ${file(im_path).baseName}" }
+
+    tag { channel_name }
 
     input:
     path exp_config
-    tuple val(channel_name), val(im_path)
+    tuple val(channel_name), val(image_path), val(task_id)
 
     output:
-    path("${file(im_path).baseName}.IMAGE_DONE")
-    val(channel_name), emit: channel_name
+    val channel_name, emit: channel
 
     script:
+    def wait = task_id ? "--task_id '${task_id}' ${globusArgs()} --wait_hours ${params.wait_hours}" : ""
     """
-    set -euo pipefail
-
-    ${params.envpath} "${params.scripts_dir}/wait_and_cut.py" \
-        --exp_config "${exp_config}" \
-        --im_path "${im_path}" \
-        --channel "${channel_name}" \
-        ${opt('wait_time',     params.wait_time)} \
-        ${opt('remote_analysis',     params.remote_analysis)} \
-
-    touch "${file(im_path).baseName}.IMAGE_DONE"
+    ${params.plexpipe} cut-image \\
+        --exp_config '${exp_config}' \\
+        --channel '${channel_name}' \\
+        --image_path '${image_path}' \\
+        ${wait} \\
+        ${opt('cleanup', params.cleanup)}
     """
 }

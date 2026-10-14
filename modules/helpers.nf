@@ -1,9 +1,17 @@
-nextflow.enable.dsl=2
+/*
+ * Helpers for building plexpipe command lines.
+ */
 
+// "--name value", "--name" for true, or "" for null/false
 def opt(name, value) {
-    if( value == null || value == false ) return ""
-    if( value == true ) return "--${name}"            // flag
-    return "--${name} ${value}"                       // argument with value
+    if( value == null || value == false || value == '' ) return ""
+    if( value == true ) return "--${name}"
+    return "--${name} '${value}'"
 }
 
-workflow Helpers {}  // required placeholder for DSL2 modules
+// Globus options, only when a Globus config is given
+def globusArgs() {
+    if( !params.globus_config ) return ""
+    def gc = file(params.globus_config)
+    return "--globus_config '${gc}' ${opt('from_collection', params.from_collection)} ${opt('to_collection', params.to_collection)}"
+}
