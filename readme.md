@@ -1,41 +1,73 @@
-## PlexPipe-flow: Nextflow Orchestration for PlexPipe
+## PlexPipe-flow: Nextflow orchestration for PlexPipe
 
-PlexPipe-flow is the scalable execution engine for the [PlexPipe](https://github.com/StallaertLab/multiplex_pipeline) multiplex imaging suite (see Documentation). It wraps the core Python logic of PlexPipe into a [Nextflow](https://www.nextflow.io/) pipeline, enabling parallel analysis of Tissue Microarrays (TMAs) and whole-slide images.
+PlexPipe-flow runs the [PlexPipe](https://github.com/StallaertLab/plex-pipe) multiplex imaging pipeline with [Nextflow](https://www.nextflow.io/), so that tissue microarrays and whole-slide images are processed in parallel, locally or on a Slurm cluster.
 
-PlexPipe-flow is a set of Nextflow wrappers (.nf modules) that call the Python scripts from PlexPipe. It manages:
+This repository contains only orchestration: Nextflow processes, resources and retries. Every process calls the `plexpipe` command that comes with the PlexPipe package (see [Command Line (plexpipe)](https://stallaertlab.github.io/plex-pipe/usage/cli/)), so the analysis code exists in one place only.
 
-- Resource Allocation: Requesting the correct CPU/RAM/GPU for each specific step.
-- Data Flow: Piping outputs from one Python script into the inputs of the next.
-- Fault Tolerance: Automatically retrying failed jobs (e.g., up to 3 times for segmentation/quantification asking for increasing resources).
+It manages:
 
-The pipeline utilizes a two-stage parallelization strategy separated by a synchronization barrier:
+- **Resource allocation**: the right CPU, memory and GPU for each step.
+- **Data flow**: the outputs of one step become the inputs of the next.
+- **Fault tolerance**: segmentation and quantification are retried (up to 3 times) with more resources.
 
-- Phase 1 (Cutting Cores): Parallelizes processing by Image Channel to extract individual cores.
-- The Barrier: A `.collect()` operator aggregates all outputs, ensuring data completeness before proceeding.
-- Phase 2 (Analysis): Shifts parallelization to the TMA Core level. Each core is independently processed through Assembly, Segmentation, and Quantification.
+The pipeline runs in two phases separated by a barrier:
+
+- **Phase 1 – cutting**: one job per channel image cuts all ROIs from it.
+- **Barrier**: `.collect()` waits until every channel has been cut.
+- **Phase 2 – per ROI**: each ROI is assembled, segmented and quantified independently.
 
 ![Nextflow Diagram](docs/flow_diagram.png)
 
-## Quick Start
+## Requirements
 
-1. Local Execution (Testing/Development) 
+- Nextflow (Java 17 or newer).
+- PlexPipe installed in an environment the jobs can use, so that `plexpipe --help` works there. Install the PlexPipe version that matches this repository (current PlexPipe `main`).
+- A PlexPipe config YAML with **absolute paths** (`general.image_dir`, `general.analysis_dir`, and any other path you set), and the ROIs already defined (`rois.pkl`).
 
-Run the pipeline on your local machine. Ideal for debugging or processing small datasets.
+## Quick start
 
-```Bash
-nextflow run example_workflow.nf \
-    -profile local \
-    --exp_config "/path/to/experiment.yaml"
+Local run:
+
+```bash
+nextflow run main.nf -profile local \
+    --exp_config /abs/path/to/config.yaml
 ```
 
-2. HPC Execution (Production) 
+Slurm cluster (adjust the `hpc` profile in `nextflow.config` to your cluster first):
 
-Submit to a Slurm cluster with GPU support for segmentation (and optionally with Globus integration for data movement).
-
-```Bash
-nextflow run example_workflow.nf \
-    -profile hpc \
-    --exp_config "/path/to/experiment.yaml"
+```bash
+nextflow run main.nf -profile hpc \
+    --exp_config /abs/path/to/config.yaml \
+    --plexpipe /abs/path/to/env/bin/plexpipe
 ```
 
-For both local and HPC execution, you can modify `nextflow.config` to match your specific hardware limits,  scheduler requirements and file paths (for details and tips see documentation).
+With images on a remote Globus collection (see [Globus Setup](https://stallaertlab.github.io/plex-pipe/usage/globus/)):
+
+```bash
+nextflow run main.nf -profile hpc \
+    --exp_config /abs/path/to/config.yaml \
+    --globus_config /abs/path/to/globus_config.yaml \
+    --cleanup
+```
+
+## Parameters
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `--exp_config` | (required) | PlexPipe config YAML (absolute paths). |
+| `--plexpipe` | `plexpipe` | The `plexpipe` command; give the full path if it is not on `PATH` in the jobs. |
+| `--globus_config` | none | Globus config YAML; fetch the images from a remote collection. |
+| `--from_collection` / `--to_collection` | `remote_source` / `local_workstation` | Collection keys in the Globus config. |
+| `--file_checksum` | `false` | Transfer images that are already present too. |
+| `--wait_hours` | `12` | How long a cutting job waits for its Globus transfer. |
+| `--cleanup` | `false` | Delete each transferred image once it is cut. |
+| `--roi_cleanup` | `false` | Delete each ROI's TIFFs once it is assembled. |
+| `--overwrite` | `false` | Overwrite existing masks and tables. Retries always overwrite what the failed attempt wrote. |
+| `--logdir` | `<launch dir>/pipeline_logs` | Nextflow timeline, report and trace. |
+
+PlexPipe's own logs (one per job) are written to the analysis `logs` folder.
+
+## Notes
+
+- **Cutting jobs are not retried.** With `--cleanup`, the transferred image is deleted after cutting, so a retry would have no input.
+- **`-resume` and the analysis folder.** PlexPipe writes the ROI stores in place in the analysis folder, and the processes pass their paths as values. `-resume` therefore re-runs a step only when its inputs (config, ROI list) change, not when the files in the analysis folder changed. To redo steps, use `--overwrite`, or run single ROIs with `plexpipe` directly.
