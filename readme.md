@@ -30,19 +30,52 @@ The pipeline runs in two phases separated by a barrier:
   The first job checks the version and stops with a message if it differs (see `--plexpipe_version`).
 - A PlexPipe config YAML with **absolute paths** (`general.image_dir`, `general.analysis_dir`, and any other path you set), and the ROIs already defined (`rois.pkl`).
 
+## Installing on a cluster
+
+Three pieces, all on the cluster's shared filesystem so that every compute node sees them:
+
+1. **Nextflow** on the login node: the cluster's module (`module load nextflow`, if there is one) or the self-installing script (`curl -s https://get.nextflow.io | bash`, then move `nextflow` to `~/bin`). Needs Java 17 or newer.
+2. **PlexPipe** in its own environment, in your home or project space:
+
+   ```bash
+   uv venv ~/envs/plexpipe-0.1.0 --python 3.12
+   uv pip install --python ~/envs/plexpipe-0.1.0/bin/python "plex_pipe[all]==0.1.0"
+   ```
+
+   On Linux, PyTorch from PyPI is the CUDA build, so segmentation can use the GPU nodes. Pass the full path of the command to the pipeline: `--plexpipe ~/envs/plexpipe-0.1.0/bin/plexpipe`.
+3. **The segmentation model weights**, downloaded once on the login node: compute nodes often have no internet access, and InstanSeg / Cellpose download their weights on first use. Run the model once there, e.g.
+
+   ```bash
+   ~/envs/plexpipe-0.1.0/bin/python -c "from instanseg import InstanSeg; InstanSeg('fluorescence_nuclei_and_cells')"
+   ```
+
+   (use the model named in your config).
+
+The pipeline code itself doesn't need installing: Nextflow fetches a tagged version from GitHub.
+
+```bash
+nextflow run plexpipe/plex-pipe-nextflow -r v0.1.0 -profile hpc,bridges2 \
+    --exp_config /abs/path/to/config.yaml \
+    --plexpipe ~/envs/plexpipe-0.1.0/bin/plexpipe
+```
+
+`hpc` sets the resources and retries of each step and works on any Slurm cluster. The second profile adds one cluster's settings (partitions, account, GPU request): `bridges2` (PSC Bridges-2; options `--account`, `--gpu_type`) and `pitt_crc` are in `conf/`. For another cluster, write the same few lines in your own file and pass it with `-c my_cluster.config` instead, so you don't edit this repository. Start Nextflow inside `tmux` or `screen`, or as a small Slurm job of its own, so it keeps running after you log out.
+
+Versions: plex-pipe-nextflow `v0.1.0` works with PlexPipe `0.1.0`.
+
 ## Quick start
 
-Local run:
+From a clone of this repository. Local run:
 
 ```bash
 nextflow run main.nf -profile local \
     --exp_config /abs/path/to/config.yaml
 ```
 
-Slurm cluster (adjust the `hpc` profile in `nextflow.config` to your cluster first):
+Slurm cluster, here PSC Bridges-2 (see [Installing on a cluster](#installing-on-a-cluster) for other clusters):
 
 ```bash
-nextflow run main.nf -profile hpc \
+nextflow run main.nf -profile hpc,bridges2 \
     --exp_config /abs/path/to/config.yaml \
     --plexpipe /abs/path/to/env/bin/plexpipe
 ```
@@ -50,7 +83,7 @@ nextflow run main.nf -profile hpc \
 With images on a remote Globus collection (see [Globus Setup](https://plexpipe.github.io/plex-pipe/latest/usage/globus/)):
 
 ```bash
-nextflow run main.nf -profile hpc \
+nextflow run main.nf -profile hpc,bridges2 \
     --exp_config /abs/path/to/config.yaml \
     --globus_config /abs/path/to/globus_config.yaml \
     --cleanup
@@ -62,6 +95,7 @@ nextflow run main.nf -profile hpc \
 |---|---|---|
 | `--exp_config` | (required) | PlexPipe config YAML (absolute paths). |
 | `--plexpipe` | `plexpipe` | The `plexpipe` command; give the full path if it is not on `PATH` in the jobs. |
+| `--account` / `--gpu_type` | your default / `v100-32` | Bridges-2 only: allocation to charge, GPU for segmentation. |
 | `--plexpipe_version` | `0.1.0` | PlexPipe version required; `''` skips the check (e.g. for a development install). |
 | `--globus_config` | none | Globus config YAML; fetch the images from a remote collection. |
 | `--from_collection` / `--to_collection` | `remote_source` / `local_workstation` | Collection keys in the Globus config. |

@@ -1,0 +1,54 @@
+# Create the GitHub Release when a version tag is pushed:
+#   tag vX.Y.Z -> check that nextflow.config has manifest version X.Y.Z and that
+#   CHANGELOG.md has a "## [X.Y.Z]" section -> GitHub Release with that section
+#   as notes (tags with "rc" become pre-releases).
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  release:
+    name: Create the GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # create the release
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v6
+
+      - name: Check the manifest version matches the tag
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          version="${version%%rc*}"
+          grep -E "^\s*version\s*=\s*'${version}'" nextflow.config \
+            || { echo "nextflow.config manifest.version is not ${version}"; exit 1; }
+
+      - name: Take the release notes from CHANGELOG.md
+        run: |
+          python3 - "${GITHUB_REF_NAME#v}" > notes.md <<'EOF'
+          import re
+          import sys
+
+          version = re.sub(r"rc\d*$", "", sys.argv[1])
+          text = open("CHANGELOG.md", encoding="utf-8").read()
+          match = re.search(
+              rf"^## \[{re.escape(version)}\][^\n]*\n(.*?)(?=^## \[|^\[[^\]]+\]: |\Z)",
+              text,
+              flags=re.MULTILINE | re.DOTALL,
+          )
+          if match is None:
+              sys.exit(f"CHANGELOG.md has no '## [{version}]' section.")
+          print(match.group(1).strip())
+          EOF
+          cat notes.md
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=""
+          if [[ "$GITHUB_REF_NAME" == *rc* ]]; then prerelease="--prerelease"; fi
+          gh release create "$GITHUB_REF_NAME" --verify-tag $prerelease \
+            --title "plex-pipe-nextflow ${GITHUB_REF_NAME#v}" --notes-file notes.md
