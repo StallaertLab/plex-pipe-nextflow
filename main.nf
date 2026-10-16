@@ -10,7 +10,7 @@
  *   RUN_QUANTIFICATION  per ROI
  *
  * Every process calls the `plexpipe` command of the installed PlexPipe
- * package (see https://stallaertlab.github.io/plex-pipe/usage/cli/).
+ * package (see https://plexpipe.github.io/plex-pipe/latest/usage/cli/).
  */
 
 include { RUN_SETUP }          from './modules/setup.nf'

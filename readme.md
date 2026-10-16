@@ -1,8 +1,8 @@
 ## PlexPipe-flow: Nextflow orchestration for PlexPipe
 
-PlexPipe-flow runs the [PlexPipe](https://github.com/StallaertLab/plex-pipe) multiplex imaging pipeline with [Nextflow](https://www.nextflow.io/), so that tissue microarrays and whole-slide images are processed in parallel, locally or on a Slurm cluster.
+PlexPipe-flow runs the [PlexPipe](https://github.com/plexpipe/plex-pipe) multiplex imaging pipeline with [Nextflow](https://www.nextflow.io/), so that tissue microarrays and whole-slide images are processed in parallel, locally or on a Slurm cluster.
 
-This repository contains only orchestration: Nextflow processes, resources and retries. Every process calls the `plexpipe` command that comes with the PlexPipe package (see [Command Line (plexpipe)](https://stallaertlab.github.io/plex-pipe/usage/cli/)), so the analysis code exists in one place only.
+This repository contains only orchestration: Nextflow processes, resources and retries. Every process calls the `plexpipe` command that comes with the PlexPipe package (see [Command Line (plexpipe)](https://plexpipe.github.io/plex-pipe/latest/usage/cli/)), so the analysis code exists in one place only.
 
 It manages:
 
@@ -21,7 +21,13 @@ The pipeline runs in two phases separated by a barrier:
 ## Requirements
 
 - Nextflow (Java 17 or newer).
-- PlexPipe installed in an environment the jobs can use, so that `plexpipe --help` works there. Install the PlexPipe version that matches this repository (current PlexPipe `main`).
+- PlexPipe **0.1.0** installed in an environment the jobs can use, so that `plexpipe --version` works there:
+
+  ```bash
+  pip install "plex_pipe[all]==0.1.0"
+  ```
+
+  The first job checks the version and stops with a message if it differs (see `--plexpipe_version`).
 - A PlexPipe config YAML with **absolute paths** (`general.image_dir`, `general.analysis_dir`, and any other path you set), and the ROIs already defined (`rois.pkl`).
 
 ## Quick start
@@ -41,7 +47,7 @@ nextflow run main.nf -profile hpc \
     --plexpipe /abs/path/to/env/bin/plexpipe
 ```
 
-With images on a remote Globus collection (see [Globus Setup](https://stallaertlab.github.io/plex-pipe/usage/globus/)):
+With images on a remote Globus collection (see [Globus Setup](https://plexpipe.github.io/plex-pipe/latest/usage/globus/)):
 
 ```bash
 nextflow run main.nf -profile hpc \
@@ -56,6 +62,7 @@ nextflow run main.nf -profile hpc \
 |---|---|---|
 | `--exp_config` | (required) | PlexPipe config YAML (absolute paths). |
 | `--plexpipe` | `plexpipe` | The `plexpipe` command; give the full path if it is not on `PATH` in the jobs. |
+| `--plexpipe_version` | `0.1.0` | PlexPipe version required; `''` skips the check (e.g. for a development install). |
 | `--globus_config` | none | Globus config YAML; fetch the images from a remote collection. |
 | `--from_collection` / `--to_collection` | `remote_source` / `local_workstation` | Collection keys in the Globus config. |
 | `--file_checksum` | `false` | Transfer images that are already present too. |

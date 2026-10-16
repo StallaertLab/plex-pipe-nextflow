@@ -1,4 +1,4 @@
-include { opt; globusArgs } from './helpers.nf'
+include { opt; globusArgs; versionCheck } from './helpers.nf'
 
 // Finds the channels, starts Globus transfers (if any) and writes the
 // lists the other processes fan out over.
@@ -15,6 +15,8 @@ process RUN_SETUP {
 
     script:
     """
+    ${versionCheck()}
+
     ${params.plexpipe} setup \\
         --exp_config '${exp_config}' \\
         --out_dir . \\
